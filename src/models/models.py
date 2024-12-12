@@ -1,11 +1,9 @@
 from sqlalchemy import Boolean, Column, Enum, Integer, String, MetaData, DateTime, ForeignKey, func
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base, relationship, backref
 
 metadata = MetaData()
 
 Base = declarative_base(metadata=metadata)
-
-"""Для более гибкого добавления тегов создаем таблицы могие ко многим"""
 
 
 class Tag(Base):
@@ -23,7 +21,7 @@ class Task_list(Base):
     completed = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
     tags = relationship("Tag", secondary="task_tags",
-                        backref="tasks", lazy='subquery')
+                        backref=backref("tasks", lazy='subquery')) 
 
 
 class TaskTag(Base):

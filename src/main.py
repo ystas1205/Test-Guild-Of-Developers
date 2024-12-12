@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 import uvicorn
 
-from api.endpoints import router
+from api.endpoints import router 
 app = FastAPI(title="API Список дел")
 
 app.include_router(router)

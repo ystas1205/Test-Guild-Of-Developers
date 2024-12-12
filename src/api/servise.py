@@ -60,3 +60,44 @@ class ItemService:
             await session.rollback()
             raise HTTPException(
                 status_code=500, detail=f"Ошибка базы данных: {e}")
+
+    async def delete_item(self, task_id: int, session: AsyncSession):
+        """ Удаление задачи по id"""
+        try:
+            # получение задачи по id
+            result = await session.get(Task_list, task_id)
+            if result is None:
+                raise HTTPException(
+                    status_code=404, detail="Задача не найдена")
+            # удаление задачи
+            await session.delete(result)
+            await session.commit()
+            return {"status": "deleted"}
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(
+                status_code=500, detail=f"Ошибка при удаление задачи: {e}")
+
+    async def translation_into_completed(self, task, task_id: int, session: AsyncSession):
+        """ Перевод задачи в выполненные"""
+        try:
+            # Получение задачи по id
+            result = await session.get(Task_list, task_id)
+            if result is None:
+                raise HTTPException(
+                    status_code=404, detail="Задача не найдена")
+
+            # Получение булевого значения completed и обновление задачи
+            completed_true = dict(task).get("completed")
+            if completed_true is None:
+                raise HTTPException(
+                    status_code=400, detail="Значение 'completed' не передано")
+            # перевод задачи в выполненые
+            result.completed = completed_true
+            await session.commit()
+            return result
+
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(
+                status_code=500, detail=f"Ошибка при обновлении задачи: {e}")

@@ -3,13 +3,14 @@ from datetime import date
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+
 class ResponseTask(BaseModel):
     id: int
     title: str
     description: str
     deadline: Optional[date]
     completed: bool
-    tags: List[str] = [] 
+    tags: List[str] = []
 
 
 class Create_task(BaseModel):
@@ -17,6 +18,8 @@ class Create_task(BaseModel):
     description: str
     deadline: Optional[date] = None
     completed: bool = False
-    name: Optional[List[str]] = None  
+    name: Optional[List[str]] = None
 
 
+class Translation_completed_task (BaseModel):
+    completed: Optional[bool]

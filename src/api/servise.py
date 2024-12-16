@@ -1,11 +1,11 @@
-
-
-from fastapi import Depends, HTTPException
-from sqlalchemy import insert, select, and_, update
+from datetime import date
+from fastapi import HTTPException
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from api.shema import Create_task, ResponseTask, Update_task
-from database.database import get_async_session
+from api.shema import Create_task, ResponseTask, Translation_completed_task, \
+    Update_task
 from models.models import Tag, Task_list, TaskTag
+from sqlalchemy.orm import selectinload
 
 
 class ItemService:
@@ -22,12 +22,12 @@ class ItemService:
                 )
             )
 
-            # извлечение id дял записи в промежуточную таблицу многие ко многим
+            # извлечение id для записи в промежуточную таблицу многие ко многим
             await session.flush()
             task_id = new_task.inserted_primary_key[0]
 
             # вызов функции добавление тегов
-            add_tag = await self.adding_tags(task, task_id, session)
+            add_tag = await ItemService.adding_tags(task, task_id, session)
             return add_tag
 
         except Exception as e:
@@ -52,7 +52,9 @@ class ItemService:
             raise HTTPException(
                 status_code=500, detail=f"Ошибка при удаление задачи: {e}")
 
-    async def translation_into_completed(self, task, task_id: int, session: AsyncSession):
+    async def translation_into_completed(self,
+                                         task: Translation_completed_task,
+                                         task_id: int, session: AsyncSession):
         """ Перевод задачи в выполненные по id"""
         try:
             # Получение задачи по id
@@ -76,44 +78,90 @@ class ItemService:
             raise HTTPException(
                 status_code=500, detail=f"Ошибка при обновлении задачи: {e}")
 
-    async def update_task(self, task: Update_task, task_id: int, session: AsyncSession):
+    async def update_task(self, task: Update_task, task_id: int,
+                          session: AsyncSession):
         """ Редактирование задачи по id"""
-
         try:
             # получение задачи для редактирования
-            result = await session.get(Task_list, task_id)
+            query = select(Task_list).options(
+                selectinload(Task_list.tags)).where(Task_list.id == task_id)
+            result = await session.execute(query)
+            tasks = result.scalars().first()
+            if tasks is None:
+                raise HTTPException(status_code=404, detail="Task not found")
+            # Обновление поля задач
+            # Исключение полей, которые не были явно установлены при 
+            # создании экземпляра модели
+            for key, value in task.dict(exclude_unset=True).items():
 
-            if result is None:
-                raise HTTPException(
-                    status_code=404, detail="Задача не найдена")
-            # если в редактировании не указыны теги обновляется только таблица
-            # список дел
-            if not task.tags:
-                for key, value in dict(task).items():
-                    if value:
-                        setattr(result, key, value)
-                await session.commit()
-                return result.__dict__
-            # если в редактировании укзаны теги обновляется таблица список
-            #  и дел и вызывается функция добавление тегов
-            update_task = await session.execute(
-                update(Task_list).where(Task_list.id == task_id).values(
-                    title=task.title,
-                    description=task.description,
-                    deadline=task.deadline,
-                    completed=task.completed,
-                )
+                if key == 'tags':
+                    tasks.tags.clear()  # Удаление старых тегов
+                    for tag_name in value:
+                        tag = Tag(name=tag_name)  # Добавляются поля Tag
+                        tasks.tags.append(tag)  # Добавляется новый тег
+                else:
+                    setattr(tasks, key, value)  # Обновляются поля Task_Tag
+
+            await session.commit()
+            return ResponseTask(
+                id=tasks.id,
+                title=tasks.title,
+                description=tasks.description,
+                deadline=tasks.deadline,
+                completed=tasks.completed,
+                tags=[tag.name for tag in tasks.tags]
             )
-
-            add_tag = await self.adding_tags(task, task_id, session)
-            return add_tag
 
         except Exception as e:
             await session.rollback()
             raise HTTPException(
                 status_code=500, detail=f"Ошибка базы данных: {e}")
 
-    async def adding_tags(self, task, task_id: int, session: AsyncSession):
+    async def get_task_list(self, skip: int,
+                            limit: int,
+                            tags: str,
+                            completed: bool,
+                            deadline_start: date,
+                            deadline_end: date,
+                            created_at_start: date,
+                            created_at_end: date,
+                            title: str,
+
+                            session: AsyncSession):
+        """ Просмотр всех задач с фильтром по тегам, статусу выполнения,
+          сортировкой по сроку, дате создания, заголовку и пагинацией."""
+        try:
+            query = select(Task_list).options(
+                selectinload(Task_list.tags)).offset(
+                skip).limit(limit)
+
+            if completed is not None:
+                query = query.filter(Task_list.completed == completed)
+
+            if tags:
+                query = query.filter(Task_list.tags.any(name=tags))
+
+            if deadline_start and deadline_end:
+                query = query.filter(Task_list.deadline.between(
+                    deadline_start, deadline_end))
+
+            if created_at_start and created_at_end:
+                query = query.filter(Task_list.created_at.between(
+                    created_at_start, created_at_end))
+
+            if title:
+                query = query.filter(Task_list.title.ilike(f"%{title}%"))
+
+            result = await session.execute(query)
+            tasks = result.scalars().all()
+            return tasks
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(
+                status_code=500, detail=f"Ошибка базы данных: {e}")
+
+    @staticmethod
+    async def adding_tags(task, task_id: int, session: AsyncSession):
         """ Добавление тегов"""
 
         try:

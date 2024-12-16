@@ -1,7 +1,6 @@
-
 from datetime import date
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ResponseTask(BaseModel):
@@ -21,9 +20,10 @@ class Create_task(BaseModel):
     deadline: Optional[date] = None
     completed: bool = False
     tags: Optional[List[str]] = None
+   
 
 
-class Translation_completed_task (BaseModel):
+class Translation_completed_task(BaseModel):
     """ Схема первода в выполненные"""
 
     completed: Optional[bool]
@@ -37,3 +37,6 @@ class Update_task(BaseModel):
     deadline: Optional[date]
     completed: Optional[bool] = False
     tags: Optional[List[str]] = []
+
+
+
